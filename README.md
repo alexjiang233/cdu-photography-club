@@ -1,6 +1,6 @@
 # 摄影协会网站
 
-> 当前工程快照，另提供 [GitHub Pages 临时静态预览](https://alexjiang233.github.io/cdu-photography-club/)。现有产品价值与视觉方案仍需重新评估，尚非正式官网。具体反馈见 [产品复盘](docs/PRODUCT_REVIEW.md)，预览构建与限制见 [发布说明](docs/GITHUB_PAGES.md)。
+> 当前工程快照，尚未正式上线。现有产品价值与视觉方案仍需重新评估，具体反馈见 [产品复盘](docs/PRODUCT_REVIEW.md)。不再使用 GitHub Pages；运行与部署采用完整的 Next.js 前端和 Django 后端。
 
 摄影协会的作品展示、成员投稿、活动报名与资料归档系统。Next.js 前端 + Django API/后台；开发使用 SQLite 与本地私有文件，正式部署使用 PostgreSQL，可选私有 S3 对象存储。
 

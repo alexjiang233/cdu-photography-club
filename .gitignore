@@ -17,6 +17,5 @@ backups/
 .local-run/
 .local-tools/
 .release/
-.pages-build/
 qa/private/
 !requirements.lock
