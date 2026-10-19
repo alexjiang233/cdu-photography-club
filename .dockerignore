@@ -1,0 +1,13 @@
+.git
+.venv
+**/node_modules
+**/.next
+**/.npm-cache
+**/__pycache__
+**/*.sqlite3
+**/storage
+**/staticfiles
+.env
+backups
+qa
+.ruff_cache
