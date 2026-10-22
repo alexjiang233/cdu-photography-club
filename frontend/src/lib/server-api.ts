@@ -2,15 +2,18 @@ import 'server-only';
 import { cookies, headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 
-export async function serverApi<T>(path: string): Promise<T> {
-  const cookieStore = await cookies();
+export async function serverApi<T>(
+  path: string,
+  { anonymous = false }: { anonymous?: boolean } = {},
+): Promise<T> {
+  const cookieStore = anonymous ? null : await cookies();
   const incoming = await headers();
   const forwardedFor = incoming.get('x-forwarded-for');
   const response = await fetch(
     `${process.env.BACKEND_URL || 'http://127.0.0.1:8000'}/api/${path}`,
     {
       headers: {
-        Cookie: cookieStore.toString(),
+        ...(cookieStore ? { Cookie: cookieStore.toString() } : {}),
         ...(forwardedFor ? { 'X-Forwarded-For': forwardedFor } : {}),
       },
       cache: 'no-store',

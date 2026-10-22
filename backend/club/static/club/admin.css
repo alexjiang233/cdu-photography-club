@@ -1,0 +1,13 @@
+/* Keep Django's native layout and color-scheme toggle; tune only technical numerals. */
+input[type="number"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+.paginator,
+.nowrap,
+.object-tools,
+.timestamp {
+  font-family: "Bahnschrift", "DIN Alternate", "Segoe UI Variable", "Cascadia Mono", sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.025em;
+}

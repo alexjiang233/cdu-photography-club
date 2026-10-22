@@ -47,3 +47,48 @@
 - 示例内容不代表协会真实作品、成员或活动。临时 UI 验证账号将在交付前禁用。
 
 完整流程与迁移/备份恢复说明见 OPERATIONS.md；架构与权限不变量见 ARCHITECTURE.md。
+
+## 2026-10-19 印样版改版
+
+改版范围：公开界面整体替换（首页、作品、活动、成员、档案、加入），新增作品档案编号与公开招新报名；业务状态机与权限未改。
+
+| 验证 | 结果 |
+| --- | --- |
+| `manage.py check` | 通过，无 issue |
+| `makemigrations --check --dry-run` | 无待生成迁移 |
+| `manage.py test club.tests` | 28 项，27 通过、1 项并发测试按设计跳过 |
+| `npm run typecheck` | 通过 |
+| `next build --webpack` | 通过；路由含 `/`、`/works`、`/events`、`/members`、`/archive`、`/join`、`/search`、`/login`、`/privacy`、`/dashboard` 等 |
+| 公开路由状态 | `/`、`/works`、`/events`、`/members`、`/archive`、`/join`、`/login`、`/privacy`、`/search` 均 200 |
+| `/about` | 308 → `/members`（`next.config.ts` permanent redirect） |
+| 招新接口 | 空姓名返回 400；合法提交返回 201 并写库；后台「入会申请」可见 |
+| 浏览器表单 | 填写并提交 `/join` 成功，显示"已收到"提示 |
+| 登录与成员中心 | 使用本地预览账号登录成功；`/dashboard`、`/dashboard/submit`、个人设置渲染正常 |
+| 响应式 | 390 / 768 / 1024 三档，全部页面无横向溢出 |
+| 图片比例 | 竖幅 2:3 作品在 4:3 外框内完整显示（letterbox），未裁剪 |
+| 截图 | `qa/home-desktop.jpg`、`qa/home-mobile.jpg` 已替换为新版 |
+
+说明：
+
+- 本地预览用 `next dev --webpack`（本机依赖以 junction 复用，Turbopack 不接受工作区外的 `node_modules`）。生产容器内依赖是本地安装，不受影响。
+- `next start` 不适用于 `output: 'standalone'`；正式部署仍按 `deploy/` 的 Nginx + standalone 方式，`/api/` 由 Nginx 直接转给 Django，不经过 Next rewrites。
+- 本轮未启动 Docker Compose，未验证公网域名、TLS、SMTP、ClamAV；管理员 TOTP 仅沿用原有测试覆盖。
+
+补充：空站状态
+
+临时把全部示例作品/活动/档案归档后检查首页：首屏显示"第一组作品，正在征集"的征集面板，四个统计为 `00`，作品与活动区块给出具体投稿指引，档案显示"待归档"，没有空白破图或重叠。截图见 `qa/empty-home-desktop.jpg`、`qa/empty-home-mobile.jpg`。检查后已恢复示例内容。
+
+
+## 2026-10-19 动效层
+
+| 验证 | 结果 |
+| --- | --- |
+| 首屏水合 | 无 hydration mismatch（首屏标记延迟到 `requestIdleCallback`，后续节点由 MutationObserver 接管） |
+| 滚动入场 | 首页 22 个 `data-reveal`，首屏 6 个直接显示，滚动后增至 17 个 |
+| 客户端导航 | 首页 → 作品：6 个印样全部入场，页面淡入完成 |
+| 手机菜单 | 打开后焦点在"首页"，`body` 滚动锁定；Esc 关闭并恢复滚动 |
+| 阅读进度 | 作品详情滚动 1200px 时进度条宽度 91.6% |
+| 复制链接 | 点击后按钮变"已复制"，底部 toast 显示 |
+| 年份高亮 | 档案页滚动后对应年份链接获得 `.active` |
+| 减少动效 | `prefers-reduced-motion: reduce` 下隐藏元素数为 0 |
+| 控制台 | 无错误 |

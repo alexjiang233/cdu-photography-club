@@ -1,0 +1,9 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h2>绑定手机验证器</h2>
+<p>使用手机验证器扫描下方二维码，添加此管理员账号。二维码及绑定地址包含验证密钥，请勿分享。</p>
+<img width="200" height="200" src="{% url 'admin:otp_totp_totpdevice_qrcode' pk=device.pk %}" alt="管理员验证器绑定二维码">
+<p>如果二维码无法显示，可将下方绑定地址导入可信的验证器：</p>
+<p style="overflow-wrap: anywhere;">{{ device.config_url }}</p>
+<p><a href="{% url 'admin:otp_totp_totpdevice_change' device.pk %}">返回设备配置</a></p>
+{% endblock %}

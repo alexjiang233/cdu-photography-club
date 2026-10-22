@@ -3,8 +3,37 @@
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError, PermissionDenied
-from .models import AuditLog, Collection, Document, Event, Notice, Registration, Status, Asset
+from .models import AuditLog, Collection, Comment, Document, Event, Notice, Registration, Status, Asset, Issue
 from .permissions import can_edit, can_moderate, require_member
+
+
+def submit_comment(user, target, validated_data):
+    """Visitors can submit comments; only moderation makes them public."""
+    return Comment.objects.create(
+        author=user if user.is_authenticated else None,
+        guest_name=validated_data.get('guest_name', '').strip(),
+        text=validated_data['text'],
+        approved=False,
+        **target,
+    )
+
+
+def assign_code(obj):
+    """给已发布的作品分配年度档案编号，例如 2026-001。"""
+    if isinstance(obj, Collection) and not obj.code and obj.published_at:
+        prefix = f'{obj.published_at.year}-'
+        last = (
+            Collection.objects.filter(code__startswith=prefix)
+            .order_by('-code')
+            .values_list('code', flat=True)
+            .first()
+        )
+        try:
+            sequence = int(last.split('-')[-1]) + 1 if last else 1
+        except (ValueError, AttributeError):
+            sequence = 1
+        obj.code = f'{prefix}{sequence:03d}'
+    return obj
 
 
 def audit(user, action, obj, detail=''):
@@ -18,8 +47,31 @@ def audit(user, action, obj, detail=''):
 
 
 @transaction.atomic
+def delete_collections(user, queryset):
+    """Delete series and their dependent rows, preserving uploaded assets and audit history."""
+    if not (user.is_active and user.is_staff and user.has_perm('club.delete_collection')):
+        raise PermissionDenied('需要作品删除权限。')
+    if queryset.model is not Collection:
+        raise ValidationError('只能删除作品系列。')
+    objects = list(queryset.select_for_update())
+    for obj in objects:
+        audit(user, 'delete_collection', obj, obj.title)
+    Collection.objects.filter(pk__in=[obj.pk for obj in objects]).delete()
+
+
+@transaction.atomic
 def transition(user, obj, action, note=''):
     obj = type(obj).objects.select_for_update().get(pk=obj.pk)
+    if isinstance(obj, Issue) and action in ['submit', 'publish']:
+        from django.core.exceptions import ValidationError as ModelValidationError
+        try:
+            obj.full_clean()
+            if not obj.blocks.exists():
+                raise ValidationError('请先编排本期内容。')
+            for block in obj.blocks.select_related('image'):
+                block.full_clean()
+        except ModelValidationError as exc:
+            raise ValidationError(exc.messages)
     if action == 'submit':
         if not can_edit(user, obj):
             raise PermissionDenied()
@@ -60,6 +112,7 @@ def transition(user, obj, action, note=''):
                 raise ValidationError('没有可发布的文件版本。')
             obj.status = Status.PUBLISHED
             obj.published_at = timezone.now()
+            assign_code(obj)
         elif action == 'return':
             if obj.status != Status.PENDING or not note.strip():
                 raise ValidationError('退回待审核内容时请填写修改建议。')
@@ -69,9 +122,12 @@ def transition(user, obj, action, note=''):
     else:
         raise ValidationError('未知操作。')
     obj.review_note = note
-    obj.save(update_fields=['status', 'review_note', 'published_at', 'updated_at'])
+    fields = ['status', 'review_note', 'published_at', 'updated_at']
+    if isinstance(obj, Collection):
+        fields.append('code')
+    obj.save(update_fields=fields)
     audit(user, action, obj, note)
-    paths = {'collection': 'works', 'event': 'events', 'document': 'archive'}
+    paths = {'collection': 'works', 'event': 'events', 'document': 'archive', 'issue': 'field-journal/issues'}
     Notice.objects.create(
         recipient=obj.owner,
         text=f'「{obj.title}」：{obj.get_status_display()}',

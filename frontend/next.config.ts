@@ -3,6 +3,15 @@ const config: NextConfig = {
   output: 'standalone',
   devIndicators: false,
   skipTrailingSlashRedirect: true,
+  async redirects() {
+    return [
+      { source: '/field-journal', destination: '/', permanent: true },
+      { source: '/field-journal/:path*', destination: '/:path*', permanent: true },
+      { source: '/events', destination: '/activities', permanent: true },
+      { source: '/events/:id', destination: '/activities/:id', permanent: true },
+      { source: '/join', destination: '/about', permanent: true },
+    ];
+  },
   async rewrites() {
     const backend = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
     return [

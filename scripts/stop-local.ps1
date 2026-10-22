@@ -7,7 +7,9 @@ foreach ($role in @('frontend','backend')) {
     $processId = $processIds.$role
     $process = Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction SilentlyContinue
     if ($process -and $process.CommandLine -and $process.CommandLine.Contains($projectRoot)) {
-        Stop-Process -Id $processId -ErrorAction SilentlyContinue
+        # Next and the Windows venv launcher create children; stop the whole owned tree.
+        & taskkill.exe /PID $processId /T /F | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "无法停止本项目的 $role 进程树（PID $processId），请检查权限。" }
     }
 }
 Remove-Item -LiteralPath $pidFile

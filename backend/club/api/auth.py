@@ -60,7 +60,7 @@ class LoginView(APIView):
             username=str(request.data.get('username', ''))[:150],
             password=request.data.get('password', ''),
         )
-        if not user:
+        if not user or not user.is_staff:
             raise ValidationError('账号或密码不正确。')
         verified_device = None
         if user.is_staff and not settings.DEBUG:

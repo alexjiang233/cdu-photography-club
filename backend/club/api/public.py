@@ -1,11 +1,44 @@
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
-from ..models import Collection, Document, Event, Notice, Profile, Registration, SiteSettings, Tag
-from ..serializers import CollectionSerializer, ProfileSerializer
+from ..models import (
+    Collection,
+    Document,
+    Event,
+    JoinApplication,
+    Notice,
+    Photo,
+    Profile,
+    Registration,
+    SiteSettings,
+    Tag,
+)
+from ..serializers import CollectionSerializer, JoinApplicationSerializer, ProfileSerializer
 from .auth import identity
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def csrf(request):
+    from django.middleware.csrf import get_token
+
+    return Response({'csrf_token': get_token(request)})
+
+
+def public_stats():
+    published = {'status': 'published', 'visibility': 'public'}
+    return {
+        'collections': Collection.objects.filter(**published).count(),
+        'photos': Photo.objects.filter(Q(collection__status='published', collection__visibility='public') | Q(event__status='published', event__visibility='public')).count(),
+        'events': Event.objects.filter(**published).count(),
+        'documents': Document.objects.filter(**published).count(),
+        'members': Profile.objects.filter(is_public=True).count(),
+    }
 
 
 @api_view(['GET'])
@@ -18,10 +51,12 @@ def site_info(request):
             'introduction': site.introduction,
             'join_instructions': site.join_instructions,
             'contact_email': site.contact_email,
+            'contact_qr_url': f'/api/assets/{site.contact_qr_id}/display/?v={site.contact_qr.checksum[:12]}' if site.contact_qr_id else None,
             'logo_url': f'/api/assets/{site.logo_id}/display/?v={site.logo.checksum[:12]}'
             if site.logo_id
             else None,
             'tags': list(Tag.objects.values_list('name', flat=True)),
+            'stats': public_stats(),
             'has_demo': any(
                 model.objects.filter(is_demo=True, status='published', visibility='public').exists()
                 for model in [Collection, Event, Document]
@@ -94,3 +129,29 @@ def health(request):
     with connection.cursor() as cursor:
         cursor.execute('SELECT 1')
     return Response({'status': 'ok'})
+
+
+class JoinThrottle(ScopedRateThrottle):
+    scope = 'join'
+
+
+class JoinApplicationView(APIView):
+    """公开招新报名；联系方式只进入后台，不对外返回。"""
+
+    permission_classes = [AllowAny]
+    throttle_classes = [JoinThrottle]
+
+    def post(self, request):
+        # 隐藏字段用于挡机器人：填了就当成功，但不入库。
+        if str(request.data.get('website', '')).strip():
+            return Response({'detail': '已收到。'}, status=status.HTTP_201_CREATED)
+        serializer = JoinApplicationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        application = serializer.save()
+        return Response(
+            {
+                'detail': '已收到。负责人会在一周内联系你。',
+                'id': str(application.pk),
+            },
+            status=status.HTTP_201_CREATED,
+        )

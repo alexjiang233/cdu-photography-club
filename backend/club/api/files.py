@@ -7,7 +7,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .. import services, storage
-from ..models import Asset, Collection, Document, Event, SiteSettings
+from ..models import Asset, Collection, Document, Event, SiteSettings, Issue
+from django.db.models import Q
 from ..permissions import can_edit, require_member, visible_queryset
 from ..serializers import AssetSerializer
 from ..uploads import ingest
@@ -55,11 +56,13 @@ def asset_file(request, pk, variant):
         asset.owner_id == request.user.id or request.user.has_perm('club.view_asset')
     )
     collections = visible_queryset(Collection.objects.filter(photos__asset=asset), request.user)
-    events = visible_queryset(Event.objects.filter(cover=asset), request.user)
+    events = visible_queryset(Event.objects.filter(Q(cover=asset) | Q(photos__asset=asset)), request.user)
     documents = visible_queryset(Document.objects.filter(versions__asset=asset), request.user)
     logo = SiteSettings.objects.filter(logo=asset).exists()
+    qr = SiteSettings.objects.filter(contact_qr=asset).exists()
+    issues = visible_queryset(Issue.objects.filter(Q(cover=asset) | Q(blocks__image=asset)), request.user)
     if variant in ['display', 'thumbnail']:
-        if not (owned or collections.exists() or events.exists() or logo):
+        if not (owned or collections.exists() or events.exists() or issues.exists() or logo or qr):
             raise Http404()
         key = asset.display_key if variant == 'display' else asset.thumbnail_key
         if not key:

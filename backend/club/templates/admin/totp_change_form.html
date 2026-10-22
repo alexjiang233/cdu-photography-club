@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">管理首页</a> &rsaquo;
+<a href="{% url 'admin:otp_totp_totpdevice_changelist' %}">管理员验证器</a> &rsaquo; {{ title }}</div>
+{% endblock %}
+{% block form_top %}
+<p>此页用于把管理员账号与手机验证器绑定。正式上线后，登录后台除密码外还需输入动态验证码，与作品和活动管理无关。本地预览无需配置。</p>
+<p>通常只需选择账号、填写设备名称，并保留系统默认参数。保存后可通过“查看绑定二维码”完成手机验证器配对。正式部署也可由部署负责人使用运维文档中的绑定流程完成设置。</p>
+{{ block.super }}
+{% endblock %}

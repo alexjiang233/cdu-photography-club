@@ -79,6 +79,7 @@ class Asset(Timestamped):
     height = models.PositiveIntegerField(null=True, blank=True)
     state = models.CharField(max_length=20, choices=State.choices, default=State.PROCESSING)
     error = models.CharField(max_length=300, blank=True)
+    photo_metadata = models.JSONField('可公开的拍摄参数', default=dict, blank=True)
 
     def __str__(self):
         return self.original_name
@@ -148,6 +149,7 @@ class Event(Editorial):
 
 
 class Collection(Editorial):
+    code = models.CharField('档案编号', max_length=16, blank=True, default='', db_index=True)
     author = models.ForeignKey(
         Profile, on_delete=models.PROTECT, related_name='collections', verbose_name='作者档案'
     )
@@ -160,19 +162,35 @@ class Collection(Editorial):
         verbose_name='关联活动',
     )
     featured = models.BooleanField('首页精选', default=False)
+    is_placeholder = models.BooleanField('仅作排版占位', default=False)
 
     class Meta:
         verbose_name = '作品系列'
         verbose_name_plural = verbose_name
         ordering = ['-published_at', '-created_at']
         indexes = [models.Index(fields=['status', 'visibility', 'published_at'])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['code'],
+                condition=~Q(code=''),
+                name='unique_collection_code',
+            )
+        ]
 
 
 class Photo(Timestamped):
-    collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name='photos')
+    collection = models.ForeignKey(Collection, null=True, blank=True, on_delete=models.CASCADE, related_name='photos')
+    event = models.ForeignKey(Event, null=True, blank=True, on_delete=models.CASCADE, related_name='photos', verbose_name='活动')
     asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name='photos')
     caption = models.CharField('图片说明', max_length=300)
     position = models.PositiveIntegerField('排序', default=0)
+    photographer = models.CharField('摄影署名', max_length=100, blank=True)
+    taken_at = models.CharField('拍摄时间', max_length=50, blank=True, help_text='可手动补充；留空时读取相机原始时间，不推测时区。')
+    camera_body = models.CharField('机身', max_length=120, blank=True)
+    lens = models.CharField('镜头', max_length=160, blank=True)
+    shutter_speed = models.CharField('快门', max_length=30, blank=True)
+    aperture = models.CharField('光圈', max_length=30, blank=True)
+    iso = models.CharField('ISO', max_length=30, blank=True)
 
     def clean(self):
         from django.core.exceptions import ValidationError
@@ -186,7 +204,9 @@ class Photo(Timestamped):
     class Meta:
         ordering = ['position', 'created_at']
         constraints = [
-            models.UniqueConstraint(fields=['collection', 'asset'], name='unique_collection_asset')
+            models.UniqueConstraint(fields=['collection', 'asset'], name='unique_collection_asset'),
+            models.UniqueConstraint(fields=['event', 'asset'], name='unique_event_asset'),
+            models.CheckConstraint(condition=(Q(collection__isnull=False, event__isnull=True) | Q(collection__isnull=True, event__isnull=False)), name='photo_one_target'),
         ]
         verbose_name = '照片'
         verbose_name_plural = verbose_name
@@ -257,7 +277,8 @@ class DocumentVersion(Timestamped):
 
 
 class Comment(Timestamped):
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT)
+    guest_name = models.CharField('访客昵称', max_length=40, blank=True)
     collection = models.ForeignKey(
         Collection, null=True, blank=True, on_delete=models.CASCADE, related_name='comments'
     )
@@ -305,6 +326,78 @@ class AuditLog(Timestamped):
         verbose_name_plural = verbose_name
 
 
+class JoinApplication(Timestamped):
+    """公开招新报名。只有管理员能查看联系方式。"""
+
+    name = models.CharField('姓名', max_length=40)
+    college = models.CharField('学院与专业', max_length=120)
+    grade = models.CharField('年级', max_length=20)
+    contact = models.CharField('联系方式', max_length=120)
+    gear = models.CharField('常用器材', max_length=120, blank=True)
+    portfolio = models.CharField('作品链接', max_length=300, blank=True)
+    message = models.TextField('想拍什么', max_length=600, blank=True)
+    handled = models.BooleanField('已处理', default=False)
+    note = models.CharField('处理备注', max_length=300, blank=True)
+
+    def __str__(self):
+        return f'{self.name} · {self.college}'
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = '入会申请'
+        verbose_name_plural = verbose_name
+        indexes = [models.Index(fields=['handled', '-created_at'])]
+
+
+class Issue(Editorial):
+    number = models.PositiveIntegerField('编排编号', unique=True)
+    english_title = models.CharField('英文标题', max_length=140, blank=True)
+    cover = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name='+', verbose_name='封面照片')
+    credits = models.CharField('编排署名', max_length=300, blank=True)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.cover_id and (self.cover.state != Asset.State.READY or not self.cover.content_type.startswith('image/')):
+            raise ValidationError({'cover': '请选择已处理完成的图片。'})
+
+    def get_absolute_url(self):
+        return f'/field-journal/issues/{self.pk}'
+
+    class Meta:
+        verbose_name = '展览编排'
+        verbose_name_plural = verbose_name
+        ordering = ['-number']
+
+
+class IssueBlock(Timestamped):
+    class Layout(models.TextChoices):
+        WIDE = 'wide', '大幅照片'
+        PAIR = 'pair', '并列照片（连续两项组成一组）'
+        INSET = 'inset', '留白照片'
+        TEXT = 'text', '文字段落'
+    issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name='blocks')
+    position = models.PositiveIntegerField('顺序', default=0)
+    layout = models.CharField('版式', max_length=10, choices=Layout.choices, default=Layout.WIDE)
+    image = models.ForeignKey(Asset, null=True, blank=True, on_delete=models.PROTECT, related_name='+', verbose_name='照片')
+    heading = models.CharField('标题或照片名', max_length=140, blank=True)
+    text = models.TextField('文字或图注', max_length=6000, blank=True)
+    credit = models.CharField('摄影署名', max_length=100, blank=True)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.layout != self.Layout.TEXT and not self.image_id:
+            raise ValidationError({'image': '照片版式需要选择图片。'})
+        if self.layout == self.Layout.TEXT and not self.text.strip():
+            raise ValidationError({'text': '文字段落不能为空。'})
+        if self.image_id and (self.image.state != Asset.State.READY or not self.image.content_type.startswith('image/')):
+            raise ValidationError({'image': '请选择已处理完成的图片。'})
+
+    class Meta:
+        verbose_name = '展览内容'
+        verbose_name_plural = verbose_name
+        ordering = ['position', 'created_at']
+
+
 class SiteSettings(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     name = models.CharField('协会名称', max_length=80, default='摄影协会')
@@ -312,6 +405,7 @@ class SiteSettings(models.Model):
     join_instructions = models.TextField('加入方式', blank=True)
     contact_email = models.EmailField('联系邮箱', blank=True)
     logo = models.ForeignKey(Asset, null=True, blank=True, on_delete=models.SET_NULL)
+    contact_qr = models.ForeignKey(Asset, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', verbose_name='联系二维码')
 
     class Meta:
         verbose_name = '网站设置'

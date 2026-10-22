@@ -23,7 +23,7 @@ $backendProcess = Start-Process -FilePath $pythonExe -ArgumentList @('manage.py'
 $nodeExe = (Get-Command node.exe).Source
 $nextCli = Join-Path $projectRoot 'frontend\node_modules\next\dist\bin\next'
 $mode = if ($Production) { 'start' } else { 'dev' }
-$frontendProcess = Start-Process -FilePath $nodeExe -ArgumentList @(('"{0}"' -f $nextCli),$mode,'--hostname','127.0.0.1') -WorkingDirectory (Join-Path $projectRoot 'frontend') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $runDir 'frontend.log') -RedirectStandardError (Join-Path $runDir 'frontend-error.log') -PassThru
+$frontendProcess = Start-Process -FilePath $nodeExe -ArgumentList @(('"{0}"' -f $nextCli),$mode,'--hostname','127.0.0.1','--port','3000') -WorkingDirectory (Join-Path $projectRoot 'frontend') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $runDir 'frontend.log') -RedirectStandardError (Join-Path $runDir 'frontend-error.log') -PassThru
 @{ backend = $backendProcess.Id; frontend = $frontendProcess.Id } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runDir 'processes.json')
 Write-Host '网站已启动：http://127.0.0.1:3000；管理后台：http://127.0.0.1:3000/admin/'
 Write-Host '这是本地预览。正式部署请使用 docs/OPERATIONS.md。'

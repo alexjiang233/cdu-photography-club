@@ -1,0 +1,458 @@
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-press: 120ms;
+  --dur-hover: 180ms;
+  --dur-state: 260ms;
+  --dur-reveal: 560ms;
+  --stagger: 45ms;
+}
+
+.lightbox[open] {
+  animation: lightbox-in 240ms var(--ease-out) both;
+}
+.lightbox[open]::backdrop {
+  animation: backdrop-in 240ms ease both;
+}
+@keyframes lightbox-in {
+  from {
+    opacity: 0;
+    transform: scale(0.975);
+  }
+}
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+.lightbox-image {
+  transform-origin: center;
+}
+.copy-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: 400 12px/1 var(--mono);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.copy-link:hover {
+  color: var(--red);
+}
+.copy-link svg {
+  transition: transform var(--dur-hover) var(--ease-out);
+}
+.copy-link:hover svg {
+  transform: translateY(-1px);
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  z-index: 80;
+  transform: translate(-50%, 10px);
+  opacity: 0;
+  pointer-events: none;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 10px 16px;
+  font: 400 12px/1.4 var(--mono);
+  letter-spacing: 0.04em;
+  transition:
+    opacity var(--dur-hover) ease,
+    transform var(--dur-state) var(--ease-out);
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* Seven slow, alternating rows. Pausing is explicit and also follows visibility. */
+.wall-track {
+  animation: gallery-wall-drift 88s linear infinite;
+  will-change: transform;
+}
+.wall-track-reverse {
+  animation-duration: 108s;
+  animation-direction: reverse;
+}
+.wall-scene[data-paused] .wall-track {
+  animation-play-state: paused;
+}
+@keyframes gallery-wall-drift {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+.gallery-layout .gl-album-photo img {
+  transition: opacity 320ms ease;
+}
+.gallery-layout .gl-album a:hover img {
+  opacity: 0.9;
+}
+html[data-motion='reduced'] .wall-track {
+  animation: none;
+}
+html[data-motion='reduced'] .wall-pause {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wall-track {
+    animation: none;
+  }
+  .wall-pause {
+    display: none;
+  }
+  .gallery-layout .gl-album-photo img {
+    transition: none;
+  }
+}
+/* Gallery choreography: content stays readable without scripts or motion. */
+.gallery-layout {
+  --gallery-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.gl-content-enter {
+  animation: gl-page-arrive 420ms var(--gallery-ease) both;
+}
+@keyframes gl-page-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.gl-cover-line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+.gl-cover-line > span {
+  display: block;
+  animation: gl-cover-arrive 1100ms var(--gallery-ease) both;
+}
+.gl-cover-line:nth-child(2) > span {
+  animation-delay: 150ms;
+}
+@keyframes gl-cover-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(105%) rotate(1.2deg);
+  }
+}
+.wall-hero-english {
+  animation: gl-quiet-arrive 800ms 180ms var(--gallery-ease) both;
+}
+@keyframes gl-quiet-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.wall-hero-foot a > span {
+  display: inline-block;
+  animation: gl-down-hint 1400ms 1200ms var(--gallery-ease) 2;
+}
+@keyframes gl-down-hint {
+  45% {
+    transform: translateY(6px);
+  }
+}
+/* Cover moves only with native page scrolling; no scroll interception. */
+@supports (animation-timeline: view()) {
+  .wall-hero {
+    view-timeline-name: --gallery-cover;
+    view-timeline-axis: block;
+  }
+  .wall-hero-copy {
+    animation: gl-cover-recede linear both;
+    animation-timeline: --gallery-cover;
+    animation-range: exit 0% exit 75%;
+  }
+  @keyframes gl-cover-recede {
+    to {
+      opacity: 0;
+      translate: 0 65px;
+    }
+  }
+}
+.gallery-layout .ex-nav a {
+  transition: color 220ms ease;
+}
+.gallery-layout .ex-nav a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -5px;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 320ms var(--gallery-ease);
+}
+.gallery-layout .ex-nav a[aria-current='page']::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+.gl-logo {
+  transition: transform 500ms var(--gallery-ease);
+}
+.gallery-layout .gl-album-photo {
+  transition:
+    transform 600ms var(--gallery-ease),
+    outline-color 300ms ease;
+}
+.gallery-layout .gl-album-photo img {
+  transition:
+    transform 850ms var(--gallery-ease),
+    opacity 300ms ease;
+}
+.gl-album-title h3,
+.gl-photo-browser figcaption a {
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 6px;
+  transition: text-decoration-color 250ms ease;
+}
+.gl-event-ticket {
+  position: relative;
+  transition: background-color 300ms ease;
+}
+.gl-event-ticket::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 2px;
+  background: var(--fj-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 450ms var(--gallery-ease);
+}
+.gl-event-ticket time strong {
+  display: block;
+  transition:
+    color 300ms ease,
+    transform 450ms var(--gallery-ease);
+}
+.gl-ticket-open > span {
+  display: inline-block;
+  transition: transform 400ms var(--gallery-ease);
+}
+.gl-section-heading > a,
+.gl-site-footer nav a {
+  transition:
+    translate 320ms var(--gallery-ease),
+    color 220ms ease;
+}
+.gl-browse-frame {
+  transition: background-color 300ms ease;
+}
+.gl-browse-frame img {
+  transition: transform 700ms var(--gallery-ease);
+}
+.gl-browse-tools input,
+.gl-browse-tools select,
+.gl-event-search input {
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease;
+}
+.gl-browse-tools input:focus,
+.gl-browse-tools select:focus,
+.gl-event-search input:focus {
+  border-color: var(--fj-accent);
+  background-color: #fffefa;
+}
+.gallery-layout .ex-photo-button {
+  transition: opacity 250ms ease;
+}
+.gallery-layout .photo-contact-sheet button {
+  transition:
+    background-color 250ms ease,
+    color 250ms ease,
+    transform 320ms var(--gallery-ease);
+}
+.gallery-layout .photo-contact-sheet button[aria-pressed='true'] {
+  transform: translateY(-4px);
+}
+.gallery-layout .lightbox-facts {
+  animation: gl-quiet-arrive 330ms 80ms var(--gallery-ease) both;
+}
+@media (hover: hover) and (pointer: fine) {
+  .gallery-layout .ex-nav a:hover {
+    opacity: 1;
+  }
+  .gallery-layout .ex-nav a:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  .ex-brand:hover .gl-logo {
+    transform: rotate(-6deg);
+  }
+  .gallery-layout .gl-album a:hover .gl-album-photo {
+    transform: translateY(-4px);
+    outline-color: #8a8477;
+  }
+  .gallery-layout .gl-album a:hover img {
+    transform: scale(1.015);
+    opacity: 1;
+  }
+  .gl-album a:hover h3,
+  .gl-photo-browser figcaption a:hover {
+    text-decoration-color: currentColor;
+  }
+  .gl-event-ticket:hover::before {
+    transform: scaleX(1);
+  }
+  .gl-event-ticket:hover {
+    background-color: #e3dfd4;
+  }
+  .gl-event-ticket:hover time strong {
+    color: var(--fj-accent);
+    transform: translateY(-3px);
+  }
+  .gl-event-ticket:hover .gl-ticket-open > span {
+    transform: translate(3px, -3px);
+  }
+  .gl-section-heading > a:hover,
+  .gl-site-footer nav a:hover {
+    translate: 4px 0;
+  }
+  .gl-browse-frame:hover {
+    background-color: #eae6dc;
+  }
+  .gl-browse-frame:hover img {
+    transform: scale(1.018);
+  }
+  .gallery-layout .ex-photo-button:hover {
+    opacity: 0.94;
+  }
+  .gallery-layout .photo-contact-sheet button:hover {
+    transform: translateY(-4px);
+  }
+}
+.gallery-layout .ex-nav a:focus-visible::after,
+.gl-event-ticket:focus-visible::before {
+  transform: scaleX(1);
+}
+.gallery-layout .gl-event-search button:active,
+.gallery-layout .photo-contact-sheet button:active {
+  transform: scale(0.98);
+}
+html[data-motion='reduced'] .gallery-layout *,
+html[data-motion='reduced'] .gallery-layout *::before,
+html[data-motion='reduced'] .gallery-layout *::after {
+  animation: none !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gallery-layout *,
+  .gallery-layout *::before,
+  .gallery-layout *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.gl-header-shell {
+  transition:
+    background-color 260ms ease,
+    border-color 260ms ease;
+}
+
+.gl-home-float {
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+.gl-home-float:hover {
+  background: var(--fj-ink);
+  color: var(--fj-paper);
+}
+
+/* Scroll unfolds the exhibition at the reader's own pace. No wheel interception. */
+@supports (animation-timeline: view()) {
+  .gallery-layout [data-scroll-reveal] {
+    animation: gallery-scroll-arrive linear both;
+    animation-timeline: view(block);
+    animation-range: entry 0% entry 85%;
+  }
+  .gallery-layout [data-scroll-reveal][data-reveal='gallery-print'] {
+    animation-name: gallery-scroll-print;
+    animation-range: entry 0% entry 90%;
+  }
+  .gallery-layout [data-scroll-reveal][data-reveal='gallery-heading'] {
+    animation-name: gallery-scroll-heading;
+    animation-range: entry 0% entry 100%;
+  }
+  .gl-event-cards > [data-scroll-reveal]:nth-child(3n + 2) {
+    animation-range: entry 8% entry 93%;
+  }
+  .gl-event-cards > [data-scroll-reveal]:nth-child(3n) {
+    animation-range: entry 16% entry 100%;
+  }
+  @keyframes gallery-scroll-arrive {
+    from {
+      opacity: 0.15;
+      transform: translateY(40px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes gallery-scroll-print {
+    from {
+      opacity: 0.12;
+      transform: translateY(64px) rotate(0.8deg) scale(0.965);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes gallery-scroll-heading {
+    from {
+      opacity: 0.2;
+      transform: translateY(28px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @media (max-width: 650px) {
+    .gallery-layout [data-scroll-reveal] {
+      animation-range: entry 0% entry 70%;
+    }
+    .gallery-layout [data-scroll-reveal][data-reveal='gallery-print'] {
+      animation-range: entry 0% entry 75%;
+    }
+    @keyframes gallery-scroll-print {
+      from {
+        opacity: 0.2;
+        transform: translateY(34px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
+}
+html[data-motion='reduced'] .gallery-layout [data-scroll-reveal] {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gallery-layout [data-scroll-reveal] {
+    animation: none !important;
+  }
+}

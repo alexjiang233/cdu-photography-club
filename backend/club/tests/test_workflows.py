@@ -152,10 +152,10 @@ class WorkflowsTest(TestCase):
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get(f'/api/assets/{asset.pk}/display/').status_code, 404)
 
-    def test_derived_image_removes_metadata(self):
+    def test_derived_image_preserves_metadata(self):
         asset = self.upload()
         with Image.open(io.BytesIO(storage.get(asset.display_key))) as image:
-            self.assertFalse(image.getexif())
+            self.assertEqual(image.getexif().get(270), 'private metadata')
         self.assertEqual(asset.state, Asset.State.READY)
 
     def test_fake_extension_rejected(self):
@@ -357,7 +357,7 @@ class WorkflowsTest(TestCase):
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get(f'/api/collections/{obj.pk}/comments/').data['count'], 0)
 
-    def test_real_login_requires_csrf(self):
+    def test_member_login_is_disabled_and_csrf_is_required(self):
         client = APIClient(enforce_csrf_checks=True)
         self.assertEqual(
             client.post(
@@ -375,8 +375,8 @@ class WorkflowsTest(TestCase):
             format='json',
             HTTP_X_CSRFTOKEN=token,
         )
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertTrue(response.data['authenticated'])
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertNotIn('_auth_user_id', client.session)
 
     def test_private_author_profile_is_not_exposed(self):
         obj = self.collection(status=Status.PUBLISHED)

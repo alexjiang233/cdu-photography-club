@@ -1,5 +1,7 @@
 # API 约定
 
+> 2026-10-19：前台账号功能已撤下；`auth/login/` 仅接受管理员，管理后台暂时保留。公开表单使用 `GET /api/csrf/`，返回 `csrf_token`。详见 [当前公开访问规则](PUBLIC_ACCESS.md)。
+
 统一前缀 `/api/`，JSON；文件上传使用 multipart。URL 保留末尾 `/`。列表分页每页 24 条，返回 `count / next / previous / results`；`page` 选择页码。权限不足返回 403 或隐藏对象的 404，字段错误返回 400。
 
 ## 身份
@@ -35,9 +37,11 @@
 
 三类内容均支持 `/{id}/workflow/` POST，参数 `action`：`submit / publish / return / revise / archive`；退回需填写 `note`。
 
-作品与活动均支持 `/{id}/comments/` GET / POST，创建参数 `text`。新讨论等待后台审核；作者可以看到自己的待审核内容。
+作品与活动均支持 `/{id}/comments/` GET / POST，所有访客可提交，参数 `text`（必填，最长2000字）和 `guest_name`（可选，最长40字）。新讨论等待后台审核；公开列表只显示已审核内容，原账号作者可查看自己的待审核内容。来源 IP 每小时最多提交六次，跨作品与活动共享额度。
 
-查询参数：三类内容支持 `q, tag, mine=1`；作品支持 `featured=1, author, event`；资料支持 `year, category, event`。搜索仅查询标题、简介和标签，未实现 PDF 正文检索。
+查询参数：三类内容支持 `q, tag, mine=1`；作品支持 `featured=1, author, event`；活动支持 `when=upcoming|past`（不传时未开始的活动排在前）；资料支持 `year, category, event`。搜索仅查询标题、简介和标签，未实现 PDF 正文检索。
+
+作品对象新增只读字段 `code`（年度档案编号，例如 `2026-006`），在首次发布时分配；已有数据由迁移 `0005` 回填。
 
 ## 文件与网站
 
@@ -48,7 +52,8 @@
 | `assets/{id}/thumbnail/` | GET | 通过内容权限校验的缩略图 |
 | `assets/{id}/display/` | GET | 通过内容权限校验的展示图 |
 | `assets/{id}/download/` | GET | 原文件授权下载，响应为附件 |
-| `site/` | GET | 网站介绍、联系方式、Logo 和标签 |
+| `site/` | GET | 网站介绍、联系方式、Logo、标签与公开内容计数 `stats` |
+| `join/` | POST | 公开招新报名：`name, college, grade, contact, gear?, portfolio?, message?`；限速 6 次/小时，`website` 为隐藏反机器人字段 |
 | `members/` | GET | 公开作者档案 |
 | `members/{id}/` | GET | 单个公开作者档案 |
 | `dashboard/` | GET / POST | 本人作品/报名/通知；POST 标记通知已读 |

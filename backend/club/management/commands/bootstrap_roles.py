@@ -8,6 +8,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         roles = {
             '作品编辑': {
+                'issue': ['add', 'view', 'change'],
+                'issueblock': ['add', 'view', 'change', 'delete'],
                 'collection': ['add', 'view', 'change'],
                 'photo': ['add', 'view', 'change', 'delete'],
                 'asset': ['add', 'view'],

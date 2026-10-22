@@ -20,6 +20,7 @@ from club.models import (
     Tag,
 )
 from club import storage
+from club.services import assign_code
 from club.tasks import process_image
 
 
@@ -90,6 +91,9 @@ class Command(BaseCommand):
                 },
             )
             collection.tags.add(tags[tag])
+            if not collection.code:
+                assign_code(collection)
+                collection.save(update_fields=['code'])
             Photo.objects.get_or_create(
                 collection=collection, asset=asset, defaults={'caption': f'{title} · 排版示例图片'}
             )

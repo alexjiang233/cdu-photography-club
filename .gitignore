@@ -19,3 +19,19 @@ backups/
 .release/
 qa/private/
 !requirements.lock
+
+# 材料包整理出的原始素材（含人脸，授权确认前不入库）
+content-inbox/
+
+# 图录样例的临时字体与照片（体积大/含人脸，不入库）
+design/catalogue/assets/*.ttf
+design/catalogue/assets/*.jpg
+
+# 设计稿里的原片与字体（含人脸/体积大，确认后再入库）
+design/gallery/assets/*.jpg
+design/*/assets/*.ttf
+design/gallery/assets/*.mp4
+design/gallery/assets/wall/
+
+# 社团原始移交资料，仅本地保存
+Documents/

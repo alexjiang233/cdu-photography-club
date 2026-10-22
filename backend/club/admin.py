@@ -11,6 +11,9 @@ from .models import (
     Document,
     DocumentVersion,
     Event,
+    JoinApplication,
+    Issue,
+    IssueBlock,
     Notice,
     Photo,
     Profile,
@@ -21,14 +24,29 @@ from .models import (
 )
 from . import services
 from .uploads import ingest
+from . import otp_admin  # Register the translated authenticator interface.
 
 admin.site.site_header = '摄影协会 · 管理后台'
 admin.site.site_title = '摄影协会'
 admin.site.index_title = '内容、成员与档案'
 
 
-class PhotoInline(admin.TabularInline):
+class PhotoInline(admin.StackedInline):
     model = Photo
+    fk_name = 'collection'
+    exclude = ['event']
+    extra = 0
+    autocomplete_fields = ['asset']
+    fieldsets = [
+        (None, {'fields': ['asset', 'caption', 'position']}),
+        ('署名与拍摄参数（可选，留空读取 EXIF）', {'fields': ['photographer', 'taken_at', 'camera_body', 'lens', 'shutter_speed', 'aperture', 'iso'], 'classes': ['collapse']}),
+    ]
+
+
+class EventPhotoInline(PhotoInline):
+    model = Photo
+    fk_name = 'event'
+    exclude = ['collection']
     extra = 0
     autocomplete_fields = ['asset']
 
@@ -102,11 +120,45 @@ class EditorialAdmin(admin.ModelAdmin):
 class CollectionAdmin(EditorialAdmin):
     inlines = [PhotoInline]
     autocomplete_fields = ['author', 'event']
+    actions = EditorialAdmin.actions + ['delete_selected']
+
+    def has_delete_permission(self, request, obj=None):
+        return admin.ModelAdmin.has_delete_permission(self, request, obj)
+
+    @admin.action(description='删除所选作品系列', permissions=['delete'])
+    def delete_selected(self, request, queryset):
+        # Django's standard action displays the cascade summary and requires confirmation.
+        return admin.actions.delete_selected(self, request, queryset)
+
+    def delete_model(self, request, obj):
+        services.delete_collections(request.user, Collection.objects.filter(pk=obj.pk))
+
+    def delete_queryset(self, request, queryset):
+        services.delete_collections(request.user, queryset)
 
 
 @admin.register(Event)
 class EventAdmin(EditorialAdmin):
+    inlines = [EventPhotoInline]
     autocomplete_fields = ['cover']
+    fieldsets = [
+        ('活动内容', {'fields': ['title', 'description', 'cover', 'tags']}),
+        ('日期与地点', {'fields': ['starts_at', 'ends_at', 'location']}),
+        ('报名设置', {'fields': ['registration_deadline', 'capacity', 'registration_open']}),
+        (
+            '发布与归档',
+            {
+                'fields': [
+                    'visibility',
+                    'status',
+                    'published_at',
+                    'review_note',
+                    'owner',
+                    'is_demo',
+                ]
+            },
+        ),
+    ]
 
 
 @admin.register(Document)
@@ -158,6 +210,7 @@ class AssetAdmin(admin.ModelAdmin):
                 'width',
                 'height',
                 'checksum',
+                'photo_metadata',
             ]
             if obj
             else ['upload']
@@ -211,9 +264,9 @@ class RegistrationAdmin(admin.ModelAdmin):
 
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
-    list_display = ['text', 'author', 'approved', 'created_at']
+    list_display = ['text', 'author', 'guest_name', 'approved', 'created_at']
     list_filter = ['approved']
-    readonly_fields = ['author', 'collection', 'event', 'text']
+    readonly_fields = ['author', 'guest_name', 'collection', 'event', 'text']
     actions = ['approve', 'hide']
 
     def has_add_permission(self, request):
@@ -253,7 +306,7 @@ class AuditAdmin(admin.ModelAdmin):
 
 @admin.register(SiteSettings)
 class SettingsAdmin(admin.ModelAdmin):
-    autocomplete_fields = ['logo']
+    autocomplete_fields = ['logo', 'contact_qr']
 
     def has_add_permission(self, request):
         return not SiteSettings.objects.exists() and super().has_add_permission(request)
@@ -262,4 +315,44 @@ class SettingsAdmin(admin.ModelAdmin):
         return False
 
 
-admin.site.register(Tag)
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    search_fields = ['name']
+
+
+@admin.register(JoinApplication)
+class JoinApplicationAdmin(admin.ModelAdmin):
+    list_display = ['created_at', 'name', 'college', 'grade', 'contact', 'handled']
+    list_filter = ['handled', 'grade']
+    search_fields = ['name', 'college', 'contact', 'message']
+    readonly_fields = ['name', 'college', 'grade', 'contact', 'gear', 'portfolio', 'message']
+    list_editable = ['handled']
+    actions = ['mark_handled']
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description='标记为已处理')
+    def mark_handled(self, request, queryset):
+        count = queryset.update(handled=True)
+        self.message_user(request, f'已处理 {count} 条报名。', messages.SUCCESS)
+
+class IssueBlockInline(admin.StackedInline):
+    model = IssueBlock
+    extra = 0
+    autocomplete_fields = ['image']
+    fields = ['position', 'layout', 'image', 'heading', 'text', 'credit']
+
+
+@admin.register(Issue)
+class IssueAdmin(EditorialAdmin):
+    inlines = [IssueBlockInline]
+    autocomplete_fields = ['cover']
+    list_display = ['number', 'title', 'status', 'published_at']
+    ordering = ['-number']
+    fieldsets = [
+        ('展览封面', {'fields': ['number', 'title', 'english_title', 'cover', 'description', 'credits']}),
+        ('发布', {'fields': ['visibility', 'tags', 'status', 'published_at', 'owner', 'review_note']}),
+    ]
+    def view_on_site(self, obj):
+        return obj.get_absolute_url() + '?preview=1'

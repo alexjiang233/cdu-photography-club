@@ -1,12 +1,14 @@
 from django.db import transaction
-from django.db.models import Max, Q
+from django.db.models import Case, IntegerField, Max, Q, Value, When
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import SimpleRateThrottle
 from .. import services
 from ..models import (
     Asset,
@@ -30,6 +32,16 @@ from ..serializers import (
 )
 
 
+class CommentThrottle(SimpleRateThrottle):
+    scope = 'comment'
+
+    def get_cache_key(self, request, view):
+        if request.method != 'POST':
+            return None
+        # Use the same IP budget for guests and signed-in administrators.
+        return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+
+
 def validated_uuid(value):
     import uuid
 
@@ -46,6 +58,8 @@ class EditorialViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = visible_queryset(super().get_queryset(), self.request.user)
+        if qs.model is Collection and self.request.query_params.get('placeholder') == '0':
+            qs = qs.filter(is_placeholder=False)
         if self.request.query_params.get('mine') == '1':
             if not self.request.user.is_authenticated:
                 return qs.none()
@@ -100,18 +114,17 @@ class EditorialViewSet(viewsets.ModelViewSet):
         )
         return Response(self.get_serializer(obj).data)
 
-    @action(detail=True, methods=['get', 'post'])
+    @action(detail=True, methods=['get', 'post'], throttle_classes=[CommentThrottle])
     def comments(self, request, pk=None):
         obj = self.get_object()
         if not isinstance(obj, (Collection, Event)):
             raise Http404()
         target = {'collection': obj} if isinstance(obj, Collection) else {'event': obj}
         if request.method == 'POST':
-            require_member(request.user)
             serializer = CommentSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            serializer.save(author=request.user, **target)
-            return Response(serializer.data, status=201)
+            comment = services.submit_comment(request.user, target, serializer.validated_data)
+            return Response(CommentSerializer(comment).data, status=201)
         query = (
             Comment.objects.filter(**target)
             .filter(
@@ -162,6 +175,7 @@ class CollectionViewSet(EditorialViewSet):
                 asset=asset,
                 caption=data.validated_data['caption'],
                 position=data.validated_data.get('position', obj.photos.count()),
+                **{name: data.validated_data.get(name, '') for name in ['photographer', 'taken_at', 'camera_body', 'lens', 'shutter_speed', 'aperture', 'iso']},
             )
             services.audit(request.user, 'add_photo', obj)
         return Response(PhotoSerializer(photo).data, status=201)
@@ -190,6 +204,11 @@ class CollectionViewSet(EditorialViewSet):
         if not caption or len(caption) > 300:
             raise ValidationError('图片说明须为 1 至 300 字。')
         photo.caption = caption
+        metadata = PhotoSerializer(photo, data=request.data, partial=True)
+        metadata.is_valid(raise_exception=True)
+        for name in ['photographer', 'taken_at', 'camera_body', 'lens', 'shutter_speed', 'aperture', 'iso']:
+            if name in metadata.validated_data:
+                setattr(photo, name, metadata.validated_data[name])
         if 'position' in request.data:
             try:
                 photo.position = int(request.data['position'])
@@ -203,8 +222,21 @@ class CollectionViewSet(EditorialViewSet):
 
 
 class EventViewSet(EditorialViewSet):
-    queryset = Event.objects.select_related('cover').prefetch_related('tags')
+    queryset = Event.objects.select_related('cover').prefetch_related('tags', 'photos__asset')
     serializer_class = EventSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        now = timezone.now()
+        scope = self.request.query_params.get('when', '')
+        if scope == 'upcoming':
+            return qs.filter(starts_at__gte=now).order_by('starts_at')
+        if scope == 'past':
+            return qs.filter(starts_at__lt=now).order_by('-starts_at')
+        # 默认把尚未开始的活动排在前面，已结束的随后。
+        return qs.annotate(
+            _past=Case(When(starts_at__lt=now, then=Value(1)), default=Value(0), output_field=IntegerField())
+        ).order_by('_past', 'starts_at')
 
     @action(detail=True, methods=['post'])
     def register(self, request, pk=None):
